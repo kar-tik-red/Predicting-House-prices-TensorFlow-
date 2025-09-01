@@ -2,33 +2,72 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-
-train_data = pd.read_csv("/Users/sharingan/Desktop/Tensorflow/train.csv")
-test_data = pd.read_csv("/Users/sharingan/Desktop/Tensorflow/test.csv")
+from sklearn.preprocessing import StandardScaler
 
 
-X_train = train_data.drop('TARGET(PRICE_IN_LACS)',axis =1 )
-Y_train = train_data['TARGET(PRICE_IN_LACS)']
+train_data = pd.read_csv("/Users/sharingan/Desktop/Skills/tensorflow/train.csv")
+test_data = pd.read_csv("/Users/sharingan/Desktop/Skills/tensorflow/test.csv")
 
-x_test = test_data.values
+
+def preprocess(df, is_train=True):
+    df = df.copy()
+    
+    
+    if 'ADDRESS' in df.columns:
+        df.drop(['ADDRESS'], axis=1, inplace=True)
+    
+   
+    df['BHK_OR_RK'] = df['BHK_OR_RK'].map({'BHK': 0, 'RK': 1})
+    
+   
+    df['POSTED_BY'] = df['POSTED_BY'].map({'Owner': 0, 'Dealer': 1})
+    
+    
+    for col in df.columns:
+        if df[col].isna().sum() > 0:
+            if df[col].dtype == 'float64' or df[col].dtype == 'int64':
+                df[col] = df[col].fillna(df[col].median())
+            else:
+                df[col] = df[col].fillna(0)
+    
+    
+    if is_train:
+        X = df.drop('TARGET(PRICE_IN_LACS)', axis=1)
+        y = df['TARGET(PRICE_IN_LACS)']
+        return X, y
+    else:
+        return df
+
+
+X_train, Y_train = preprocess(train_data, is_train=True)
+X_test = preprocess(test_data, is_train=False)
+
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
 
 model = tf.keras.Sequential([
-    tf.keras.layers.Dense(1, input_shape=(X_train.shape[1],))
+    tf.keras.Input(shape=(X_train_scaled.shape[1],)),  
+    tf.keras.layers.Dense(1, kernel_initializer='zeros')  
 ])
 
-model.compile(optimizer ='sgd', loss = 'mse', metrics = ['mae'])
 
-tens_model = model.fit(X_train,Y_train , epochs = 5 , batch_size = 3, verbose = 1)
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.01), 
+              loss='mse', 
+              metrics=['mae'])
 
-loss, mae = model.evaluate(x_test)
-print(f"Test Loss (MSE): {loss:.4f}, Test MAE: {mae:.4f}")
 
-Y_pred = model.predict(x_test)
-print("Predictions:", Y_pred[:5])  
+history = model.fit(X_train_scaled, Y_train, epochs=50, batch_size=32, verbose=1)
 
-plt.scatter(x_test, Y_pred)
-plt.xlabel("Actual Target")
+
+Y_pred = model.predict(X_test_scaled)
+print("Predictions (first 5):", Y_pred[:5])
+
+
+plt.scatter(X_test_scaled[:, 0], Y_pred)
+plt.xlabel("First Feature (scaled)")
 plt.ylabel("Predicted Target")
-plt.title("Actual vs Predicted")
-plt.plot([x_test.min(), x_test.max()], [x_test.min(), x_test.max()], 'r--')
+plt.title("Predicted Target vs First Feature")
 plt.show()
